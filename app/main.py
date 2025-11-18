@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from .db import get_schema_overview
 
 app = FastAPI(
     title="Energy Expert Backend",
@@ -17,3 +18,12 @@ def read_root():
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+
+@app.get("/schema")
+def schema():
+    """
+    Return a human-readable overview of the database schema.
+    """
+    schema_data = get_schema_overview()
+    return {"schema": schema_data}
