@@ -17,7 +17,7 @@ class Settings(BaseModel):
         "OLLAMA_BASE_URL",
         "http://localhost:11434"
     )
-    OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "mistral")
+    OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "phi3:mini")
     FEEDBACK_LOG_PATH: str = os.getenv(
         "FEEDBACK_LOG_PATH",
         "feedback/feedback_log.jsonl"
