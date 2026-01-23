@@ -52,15 +52,15 @@ def read_text_file(path: str) -> str:
 
 def chunk_text(text: str, chunk_size: int = 900, overlap: int = 150) -> List[str]:
     """
-    Simple character-based chunking (works well enough for MVP).
+    Safe character-based chunking that always makes progress (prevents infinite loops).
     """
     text = (text or "").strip()
     if not text:
         return []
 
     chunks: List[str] = []
-    start = 0
     n = len(text)
+    start = 0
 
     while start < n:
         end = min(n, start + chunk_size)
@@ -68,11 +68,15 @@ def chunk_text(text: str, chunk_size: int = 900, overlap: int = 150) -> List[str
         if chunk:
             chunks.append(chunk)
 
-        start = end - overlap
-        if start < 0:
-            start = 0
-        if start >= n:
-            break
+        if end >= n:
+            break  # reached the end
+
+        # next window start with overlap, but guarantee forward progress
+        next_start = max(0, end - overlap)
+        if next_start <= start:
+            next_start = end  # force progress if overlap would stall
+
+        start = next_start
 
     return chunks
 
