@@ -1,15 +1,17 @@
-import psycopg2
-from psycopg2.extras import RealDictCursor
 from typing import List, Dict
+
+import psycopg
+from psycopg.rows import dict_row
 
 from .config import settings
 
 
 def get_connection():
     """
-    Returns a new psycopg2 connection using POSTGRES_URL.
+    Returns a new psycopg (v3) connection using POSTGRES_URL.
     """
-    conn = psycopg2.connect(settings.POSTGRES_URL)
+    # dict_row makes fetch results come back as dictionaries
+    conn = psycopg.connect(settings.POSTGRES_URL, row_factory=dict_row)
     return conn
 
 
@@ -20,7 +22,7 @@ def get_schema_overview() -> List[Dict]:
     """
     conn = get_connection()
     try:
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        with conn.cursor() as cur:
             cur.execute(
                 """
                 SELECT table_name, column_name, data_type
@@ -29,7 +31,7 @@ def get_schema_overview() -> List[Dict]:
                 ORDER BY table_name, ordinal_position;
                 """
             )
-            rows = cur.fetchall()
+            rows = cur.fetchall()  # rows are dicts because of row_factory=dict_row
 
         tables: Dict[str, Dict] = {}
         for row in rows:
