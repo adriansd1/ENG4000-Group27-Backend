@@ -1,0 +1,18 @@
+Toronto is the primary energy and infrastructure hub for our telecom network across Canada.
+Due to the density of telecom sites and the concentration of high-traffic network demand,
+Toronto is considered the most critical region for energy optimization.
+
+Key priorities for the Toronto region include:
+- Improving grid resilience and backup power reliability.
+- Investing in battery storage and smart microgrid technologies.
+- Reducing peak power consumption during high-load periods.
+- Implementing AI-driven predictive energy management for large urban sites.
+
+Toronto’s telecom infrastructure consumes significantly more power than any other Canadian
+region due to population density and enterprise traffic. Therefore, it is essential that
+all energy efficiency programs and sustainability initiatives prioritize Toronto first.
+
+Future planning should focus on:
+- Renewable energy procurement in the Greater Toronto Area.
+- Advanced cooling technologies for urban data centers.
+- Infrastructure upgrades to support electric grid transitions.

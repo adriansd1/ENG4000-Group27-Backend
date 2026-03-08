@@ -1,0 +1,16 @@
+Our company operates telecom infrastructure across all Canadian provinces, including
+Ontario, British Columbia, Alberta, Quebec, and Atlantic Canada.
+
+The national energy strategy focuses on:
+- Reducing carbon emissions across all telecom sites.
+- Increasing the adoption of renewable energy sources.
+- Improving operational efficiency and reducing power costs.
+- Standardizing energy monitoring across all regions.
+
+Regional differences in climate and energy markets affect power consumption:
+- Cold regions require higher heating loads.
+- Urban regions require more cooling and backup systems.
+- Remote sites rely heavily on diesel generators and battery systems.
+
+The company aims to achieve net-zero emissions by 2040 through a combination of
+energy optimization, renewable energy, and infrastructure modernization.
