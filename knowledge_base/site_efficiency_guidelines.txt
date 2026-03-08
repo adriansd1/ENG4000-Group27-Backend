@@ -1,0 +1,17 @@
+Energy efficiency across telecom sites is driven by monitoring, automation, and predictive maintenance.
+
+Key efficiency drivers include:
+- Intelligent HVAC control systems.
+- AI-based anomaly detection for power spikes.
+- Real-time monitoring of energy consumption.
+- Automated shutdown of unused equipment.
+
+Sites should be ranked by energy intensity and operational criticality.
+
+Priority should be given to:
+1. High-traffic urban sites.
+2. Core switching infrastructure.
+3. Regions with high electricity costs.
+
+Toronto and Vancouver are considered Tier-1 critical infrastructure zones due
+to the high economic and operational impact of outages.

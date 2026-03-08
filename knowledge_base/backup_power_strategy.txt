@@ -1,0 +1,14 @@
+Backup power is critical to telecom resilience. The company uses a mix of:
+- Lithium battery storage.
+- Diesel generators.
+- Hybrid renewable backup systems.
+
+Toronto and other major cities require enhanced redundancy due to higher outage risk
+and economic impact.
+
+Future improvements include:
+- Transitioning to hydrogen fuel cell backup systems.
+- Integrating battery storage with smart grid infrastructure.
+- Predictive maintenance of backup assets.
+
+Urban infrastructure should always maintain at least N+1 redundancy.
