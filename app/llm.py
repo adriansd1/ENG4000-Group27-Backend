@@ -1,18 +1,104 @@
+# import re
+# import requests
+# from typing import Optional
+# import logging
+# import time
+
+# from .config import settings
+
+# logger = logging.getLogger(__name__)
+
+# def call_ollama(prompt: str) -> str:
+#     """
+#     Sends a single user prompt to the local Ollama model, logs latency
+#     and returns the model's response text. All other modules should call
+#     the LLM through this function only.
+#     """
+#     url = f"{settings.OLLAMA_BASE_URL}/api/chat"
+#     payload = {
+#         "model": settings.OLLAMA_MODEL,
+#         "messages": [
+#             {"role": "user", "content": prompt}
+#         ],
+#         "stream": False,
+#     }
+#     start_time = time.time()
+
+#     try:
+#         response = requests.post(url, json=payload, timeout=800)
+#         response.raise_for_status()
+#     except Exception as e:
+#         logger.error(
+#             f"LLM call failed for model={settings.OLLAMA_MODEL}: {e}"
+#         )
+#         raise
+
+#     latency = time.time() - start_time  # --- NEW: compute latency ---
+
+#     # NEW: logging the performance:
+#     logger.info(
+#         f"LLM call success | model={settings.OLLAMA_MODEL} | latency={latency:.2f} sec | prompt_chars={len(prompt)}",
+#     )
+
+#     data = response.json()
+#     # return data["message"]["content"]
+
+#     # response = requests.post(url, json=payload, timeout=800)
+#     # response.raise_for_status()
+#     # data = response.json()
+#     # return data["message"]["content"]
+
+#     # Defensive Parsing in case the response format changes
+#     message = data.get("message", {})
+#     content = message.get("content", "")
+
+#     if not content:
+#         logger.error("LLM response has no 'message.content': %s", data)
+#         raise ValueError("LLM returned an empty or malformed response.")
+
+#     return content
+
+
+# def extract_sql_from_text(text: str) -> str:
+#     """
+#     Extract SQL from ```sql fenced block OR any ``` fenced block.
+#     Cleans up weird spacing or invisible characters.
+#     """
+
+#     import re
+
+#     # 1. Try strict ```sql ... ```
+#     strict = re.search(r"```sql\s*(.*?)```", text, flags=re.DOTALL | re.IGNORECASE)
+#     if strict:
+#         return strict.group(1).strip()
+
+#     # 2. Try generic ```...```
+#     generic = re.search(r"```\s*(.*?)\s*```", text, flags=re.DOTALL)
+#     if generic:
+#         return generic.group(1).strip()
+
+#     # 3. Try lines that start with SELECT
+#     for line in text.splitlines():
+#         if line.strip().lower().startswith("select"):
+#             return line.strip()
+
+#     # 4. Fallback → return everything (still cleaned)
+#     return text.strip()
+
 import re
-import requests
-from typing import Optional
-import logging
 import time
+import logging
+import requests
 
 from .config import settings
 
 logger = logging.getLogger(__name__)
 
+
 def call_ollama(prompt: str) -> str:
     """
-    Sends a single user prompt to the local Ollama model, logs latency
-    and returns the model's response text. All other modules should call
-    the LLM through this function only.
+    Sends a prompt to the local Ollama model and returns the response text.
+    All LLM access should go through this function.
     """
     url = f"{settings.OLLAMA_BASE_URL}/api/chat"
     payload = {
@@ -22,33 +108,29 @@ def call_ollama(prompt: str) -> str:
         ],
         "stream": False,
     }
+
     start_time = time.time()
 
     try:
-        response = requests.post(url, json=payload, timeout=800)
+        response = requests.post(
+            url,
+            json=payload,
+            timeout=settings.OLLAMA_TIMEOUT_SECONDS,
+        )
         response.raise_for_status()
     except Exception as e:
-        logger.error(
-            f"LLM call failed for model={settings.OLLAMA_MODEL}: {e}"
-        )
+        logger.error("LLM call failed for model=%s: %s", settings.OLLAMA_MODEL, e)
         raise
 
-    latency = time.time() - start_time  # --- NEW: compute latency ---
-
-    # NEW: logging the performance:
+    latency = time.time() - start_time
     logger.info(
-        f"LLM call success | model={settings.OLLAMA_MODEL} | latency={latency:.2f} sec | prompt_chars={len(prompt)}",
+        "LLM call success | model=%s | latency=%.2f sec | prompt_chars=%d",
+        settings.OLLAMA_MODEL,
+        latency,
+        len(prompt),
     )
 
     data = response.json()
-    # return data["message"]["content"]
-
-    # response = requests.post(url, json=payload, timeout=800)
-    # response.raise_for_status()
-    # data = response.json()
-    # return data["message"]["content"]
-
-    # Defensive Parsing in case the response format changes
     message = data.get("message", {})
     content = message.get("content", "")
 
@@ -61,26 +143,22 @@ def call_ollama(prompt: str) -> str:
 
 def extract_sql_from_text(text: str) -> str:
     """
-    Extract SQL from ```sql fenced block OR any ``` fenced block.
-    Cleans up weird spacing or invisible characters.
+    Extract SQL from:
+    1. ```sql fenced blocks
+    2. generic ``` fenced blocks
+    3. a line starting with SELECT
+    4. fallback to full text
     """
-
-    import re
-
-    # 1. Try strict ```sql ... ```
     strict = re.search(r"```sql\s*(.*?)```", text, flags=re.DOTALL | re.IGNORECASE)
     if strict:
         return strict.group(1).strip()
 
-    # 2. Try generic ```...```
     generic = re.search(r"```\s*(.*?)\s*```", text, flags=re.DOTALL)
     if generic:
         return generic.group(1).strip()
 
-    # 3. Try lines that start with SELECT
     for line in text.splitlines():
         if line.strip().lower().startswith("select"):
             return line.strip()
 
-    # 4. Fallback → return everything (still cleaned)
     return text.strip()
