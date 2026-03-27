@@ -194,16 +194,64 @@ Recommended join patterns:
 """
 
 DOMAIN_GLOSSARY = """
-Domain glossary for telecom energy analytics:
-- gridkw / gridkwh: power drawn from the electrical grid and grid energy usage.
-- dg1kw / dg1kwh / dg1hr: diesel generator power, energy, and runtime.
-- batt1kw / batt1kwh / batt1hr: battery power, battery energy, and battery runtime.
-- aircon1kw / aircon1kwh / aircon1comphr: air conditioner power, energy, and compressor runtime.
-- aircon1freecoolhr: hours spent in free-cooling mode.
-- rectifier-related values generally indicate DC power conversion behavior.
-- shelter and cabinet temperature fields describe thermal conditions at the site.
-- max/min columns describe daily observed extremes.
-- questions involving abnormal operation should consider alarms, temperatures, generator activity, battery runtime, grid usage, and equipment inventory together.
+DOMAIN KNOWLEDGE – TELECOM ENERGY SYSTEMS
+
+Key Tables:
+- performance_daily_data: daily operational metrics per site
+- site_metadata: site details (region, type, location)
+- site_inventory: equipment installed at site (generators, AC units, batteries)
+- daily_alarms: alarms triggered at site
+
+Table Relationships:
+- performance_daily_data.siteid = site_metadata.siteid
+- performance_daily_data.siteid = site_inventory.siteid
+- daily_alarms.siteid = site_metadata.siteid
+
+Key Metrics and Meaning:
+
+Energy Sources:
+- dg1kwh: Diesel Generator energy consumption (high values = heavy generator usage)
+- gridkwh: Grid energy usage
+- battkwh: Battery energy usage
+
+Runtime Indicators:
+- dg1runhr: Generator runtime hours
+- batt1hr: Battery runtime hours
+- gridhr: Grid availability hours
+
+Cooling System:
+- aircon1comphr: Air conditioner compressor runtime
+  High runtime → high cooling demand or inefficiency
+
+Interpretation Guidelines:
+
+- High dg1kwh or dg1runhr:
+  → Indicates generator dependency (possible grid failure or instability)
+
+- Low gridhr:
+  → Indicates unreliable grid supply
+
+- High aircon runtime:
+  → Could indicate:
+    - high ambient temperature
+    - poor insulation
+    - cooling inefficiency
+    - equipment overload
+
+- High battery usage:
+  → May indicate frequent outages or unstable power supply
+
+Alarms:
+- Frequent alarms indicate potential system instability or faults
+- Alarm patterns combined with energy usage can indicate root causes
+
+Expected Analysis Behavior:
+- Compare metrics to typical expectations (not just raw values)
+- Identify abnormal patterns (e.g., unusually high generator usage)
+- Correlate alarms with performance metrics
+- Suggest operational causes, not just describe data
+
+DO NOT treat column names as abstract values — always interpret them in real-world operational context.
 """
 
 
@@ -246,23 +294,27 @@ def generate_sql_for_question(question: str, previous_error: str = "") -> str:
         retry_text = f"""
 Previous SQL attempt failed with this error:
 {previous_error}
-
-Fix the SQL accordingly.
+Revise the SQL to fix that exact issue.
 """
 
     prompt = f"""
 You are an expert PostgreSQL SQL assistant for a telecom energy analytics database.
+Your task is to convert a user question into exactly ONE valid PostgreSQL read-only SELECT query.
 
-You MUST follow these rules strictly:
-1. Use only the tables and columns provided below.
-2. Generate exactly one read-only SELECT query.
-3. Never modify data or schema.
-4. Use explicit JOINs when the question requires metadata, inventory, alarms, or site names.
-5. Prefer correct joins over guessing.
-6. If a site name or location is requested, join through site_metadata.
-7. If alarms are requested, use daily_alarms.
-8. If equipment counts or models are requested, use site_inventory.
-9. If daily metrics or energy values are requested, use performance_daily_data.
+STRICT RULES:
+1.  Use ONLY the tables and columns provided below.
+2.  Generate exactly one SELECT query.
+3.  Do NOT generate INSERT, UPDATE, DELETE, DROP, ALTER, CREATE, TRUNCATE, MERGE, or multiple statements.
+4.  Use explicit JOINs whenever the question needs metadata, inventory, alarms, or site names.
+5.  Use table aliases consistently.
+6.  Qualify ambiguous columns with table aliases.
+7.  If the question asks for site name, region, province, city, grid category, owner, or site type, JOIN site_metadata.
+8.  If the question asks for equipment counts, generator count, rectifier count, AC units, batteries, or solar capacity, JOIN site_inventory.
+9.  If the question asks about alarms, severity, alarm frequency, outages, or alarm text, use daily_alarms.
+10. If the question asks about runtime, energy, voltage, current, temperatures, generator usage, battery usage, or cooling usage, use performance_daily_data.
+11. If the user asks for highest, lowest, average, total, count, trend, or ranking, use the appropriate aggregate functions.
+12. If LIMIT is not required by the question, do not add one manually; downstream code will handle that.
+13. Return ONLY the SQL inside one ```sql ... ``` code block.
 
 VALID TABLES AND COLUMNS:
 {schema_text}
@@ -271,12 +323,53 @@ VALID TABLES AND COLUMNS:
 
 {DOMAIN_GLOSSARY}
 
+SQL REASONING HINTS:
+- Interpret metric names using the domain glossary before choosing tables.
+- Prefer JOINs over guessing when descriptive output is requested.
+- If the question mentions "site" descriptively, output should usually include site_metadata fields.
+- If alarms and performance are both relevant, JOIN performance_daily_data or site_metadata with daily_alarms through siteid.
+- If inventory context is needed to explain performance, JOIN site_inventory through siteid.
+- When comparing sites, use GROUP BY and ORDER BY appropriately.
+- When filtering by date, use the correct date column exactly as defined in the schema.
+- When filtering text values, use exact column names and safe SQL conditions.
+
+EXAMPLE 1:
+Question: Which sites had the highest generator energy usage?
+```sql
+SELECT sm.sitename, p.siteid, SUM(p.dg1kwh) AS total_generator_energy
+FROM performance_daily_data p
+JOIN site_metadata sm ON p.siteid = sm.siteid
+GROUP BY sm.sitename, p.siteid
+ORDER BY total_generator_energy DESC
+LIMIT 10;
+```
+
+EXAMPLE 2:
+Question: Show sites with the most alarms.
+```sql
+SELECT sm.sitename, a.siteid, COUNT(*) AS alarm_count
+FROM daily_alarms a
+JOIN site_metadata sm ON a.siteid = sm.siteid
+GROUP BY sm.sitename, a.siteid
+ORDER BY alarm_count DESC
+LIMIT 10;
+```
+
+EXAMPLE 3:
+Question: Show sites with high generator usage and low grid availability.
+```sql
+SELECT sm.sitename, p.siteid, AVG(p.dg1kwh) AS avg_dg1kwh, AVG(p.gridhr) AS avg_gridhr
+FROM performance_daily_data p
+JOIN site_metadata sm ON p.siteid = sm.siteid
+GROUP BY sm.sitename, p.siteid
+ORDER BY avg_dg1kwh DESC, avg_gridhr ASC
+LIMIT 10;
+```
+
 {retry_text}
+User Question: {question}
 
-User Question:
-{question}
-
-Return ONLY the SQL inside a ```sql code block.
+Return ONLY the SQL inside a ```sql ... ``` code block.
 """
 
     raw_response = call_ollama(prompt)
@@ -401,6 +494,19 @@ Relevant Knowledge Base Excerpts:
 {kb_context}
 
 {DOMAIN_GLOSSARY}
+
+Additional reasoning rules:
+- Always interpret values in operational context
+- Do not just restate numbers – explain what they imply
+- Identify possible causes for abnormal patterns
+- If multiple signals exist (e.g., high DG + low grid), connect them
+
+Example:
+Question: Why is site 101 consuming high generator energy?
+Reasoning:
+- High dg1kwh + low gridhr → grid failure likely
+- High aircon runtime → increased cooling demand
+Conclusion: generator compensating for grid outage
 
 Write a clear answer for an end user.
 
