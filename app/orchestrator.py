@@ -466,7 +466,7 @@ def generate_analysis(
 
     kb_context = (
         "\n\n".join(
-            f"[Source: {c.source} | Type: {c.document_type} | Chunk {c.chunk_id}]\n{c.text}"
+            f"[Source: {c.source} | Chunk {c.chunk_id}]\n{c.text}"
             for c in kb_chunks
         )
         if kb_chunks
@@ -530,12 +530,12 @@ def orchestrate_query(question: str):
         sql = generate_sql_for_question(question, previous_error=str(e))
         rows = run_sql(sql)
 
-        analysis, diagnostics, kb_sources = generate_analysis(question, sql, rows)
+    analysis, diagnostics, kb_sources = generate_analysis(question, sql, rows)
 
-        return {
-            "sql": sql,
-            "rows": rows,
-            "analysis": analysis,
-            "diagnostics": diagnostics,
-            "kb_sources": kb_sources,
-        }
+    return {
+        "sql": sql,
+        "rows": rows,
+        "analysis": analysis,
+        "diagnostics": diagnostics,
+        "kb_sources": kb_sources,
+    }
