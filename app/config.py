@@ -19,6 +19,7 @@ class Settings(BaseModel):
         "http://localhost:11434"
     )
     OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "phi3:mini")
+    OLLAMA_TIMEOUT_SECONDS: int = int(os.getenv("OLLAMA_TIMEOUT_SECONDS", "800"))
     FRONTEND_ORIGINS: list[str] = [
         origin.strip()
         for origin in os.getenv(
