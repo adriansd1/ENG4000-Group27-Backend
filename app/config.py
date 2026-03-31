@@ -20,6 +20,7 @@ class Settings(BaseModel):
     )
     # Changed this to the exact tag shown by `ollama list` on your machine if needed.
     OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
+    OLLAMA_TIMEOUT_SECONDS: int = int(os.getenv("OLLAMA_TIMEOUT_SECONDS", "800"))
     # OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "phi3:mini")
     FEEDBACK_LOG_PATH: str = os.getenv(
         "FEEDBACK_LOG_PATH",
