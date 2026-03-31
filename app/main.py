@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Any, List, Dict
 
@@ -12,6 +13,13 @@ app = FastAPI(
     version="0.3.0",
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.FRONTEND_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class QueryRequest(BaseModel):
     question: str
@@ -64,5 +72,14 @@ def query_energy_expert(payload: QueryRequest):
             rows=result["rows"],
             analysis=result["analysis"],
         )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/feedback")
+def submit_feedback(payload: FeedbackRequest):
+    """Logs user feedback for future review / tuning."""
+    try:
+        return write_feedback_entry(payload)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
