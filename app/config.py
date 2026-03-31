@@ -18,6 +18,14 @@ class Settings(BaseModel):
         "http://localhost:11434"
     )
     OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "phi3:mini")
+    FRONTEND_ORIGINS: list[str] = [
+        origin.strip()
+        for origin in os.getenv(
+            "FRONTEND_ORIGINS",
+            "http://localhost:3000,http://127.0.0.1:3000"
+        ).split(",")
+        if origin.strip()
+    ]
     FEEDBACK_LOG_PATH: str = os.getenv(
         "FEEDBACK_LOG_PATH",
         "feedback/feedback_log.jsonl"  # planned for user feedback logging in later phase

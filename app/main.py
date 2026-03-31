@@ -1,7 +1,9 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Any, List, Dict
 
+from .config import settings
 from .db import get_schema_overview
 from .orchestrator import orchestrate_query
 from .knowledge_base import ingest_knowledge_base
@@ -14,6 +16,14 @@ app = FastAPI(
     title="Energy Expert Backend",
     description="Offline Conversational AI for Energy Data Analytics - Backend",
     version="0.3.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.FRONTEND_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 class QueryRequest(BaseModel):
