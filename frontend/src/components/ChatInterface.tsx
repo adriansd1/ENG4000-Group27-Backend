@@ -442,7 +442,7 @@ export default function ChatInterface({ isOpen, onClose }: ChatInterfaceProps) {
 
         <div className="border-t border-white/10 bg-[#0d0d0d] p-4">
           <div className="mx-auto max-w-4xl">
-            <div className="flex items-end gap-3 rounded-2xl border border-white/10 bg-[#1a1a1a] p-3 transition-colors focus-within:border-[#5EEAD4]/50">
+            <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-[#1a1a1a] p-3 transition-colors focus-within:border-[#5EEAD4]/50">
               <input
                 ref={fileInputRef}
                 type="file"
@@ -472,8 +472,8 @@ export default function ChatInterface({ isOpen, onClose }: ChatInterfaceProps) {
                 onKeyDown={handleKeyDown}
                 placeholder="Ask a natural-language question for the backend..."
                 rows={1}
-                className="max-h-32 flex-1 resize-none bg-transparent text-sm text-white outline-none placeholder:text-white/40"
-                style={{ minHeight: "24px" }}
+                className="max-h-32 flex-1 resize-none self-center bg-transparent py-2 text-sm leading-5 text-white outline-none placeholder:text-white/40"
+                style={{ minHeight: "40px" }}
               />
               <button
                 onClick={() => handleSend()}
