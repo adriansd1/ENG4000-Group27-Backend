@@ -1,12 +1,13 @@
-import type { BackendHealth, QueryResponse } from "@/lib/types";
+import type { BackendHealth, KnowledgeBaseUploadResponse, QueryResponse } from "@/lib/types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const isFormData = init?.body instanceof FormData;
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     headers: {
-      "Content-Type": "application/json",
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...(init?.headers ?? {}),
     },
     cache: "no-store",
@@ -38,5 +39,15 @@ export async function queryEnergyExpert(question: string) {
   return request<QueryResponse>("/api/query", {
     method: "POST",
     body: JSON.stringify({ question }),
+  });
+}
+
+export async function uploadKnowledgeBaseDocument(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  return request<KnowledgeBaseUploadResponse>("/api/kb/upload", {
+    method: "POST",
+    body: formData,
   });
 }

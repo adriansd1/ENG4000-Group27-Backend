@@ -3,9 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import logoImage from "@/app/PLCAI-logo.webp";
-import { fetchBackendHealth, queryEnergyExpert } from "@/lib/api";
+import { fetchBackendHealth, queryEnergyExpert, uploadKnowledgeBaseDocument } from "@/lib/api";
 import { getRandomThinkingMessage, suggestedQuestions } from "@/lib/demoData";
-import type { QueryResponse } from "@/lib/types";
+import type { KnowledgeBaseUploadResponse, QueryResponse } from "@/lib/types";
 
 interface Message {
   id: string;
@@ -60,10 +60,12 @@ export default function ChatInterface({ isOpen, onClose }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [thinkingMessage, setThinkingMessage] = useState("Sending request to the backend...");
   const [backendStatus, setBackendStatus] = useState<"checking" | "online" | "offline">("checking");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -124,7 +126,7 @@ export default function ChatInterface({ isOpen, onClose }: ChatInterfaceProps) {
   }, [isLoading]);
 
   const handleSend = async (question = input.trim()) => {
-    if (!question || isLoading) {
+    if (!question || isLoading || isUploading) {
       return;
     }
 
@@ -162,6 +164,66 @@ export default function ChatInterface({ isOpen, onClose }: ChatInterfaceProps) {
       setBackendStatus("offline");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleUploadResult = (response: KnowledgeBaseUploadResponse) => {
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `${Date.now()}-upload`,
+        role: "assistant",
+        content: `Uploaded ${response.filename}. The backend re-indexed the knowledge base and processed ${response.ingest.chunks ?? 0} chunks across ${response.ingest.files ?? 0} files.`,
+        timestamp: new Date(),
+      },
+    ]);
+  };
+
+  const handleFileSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `${Date.now()}-upload-error`,
+          role: "assistant",
+          content: "Upload failed. Please choose a PDF document.",
+          timestamp: new Date(),
+        },
+      ]);
+      event.target.value = "";
+      return;
+    }
+
+    setIsUploading(true);
+
+    try {
+      const response = await uploadKnowledgeBaseDocument(file);
+      handleUploadResult(response);
+      setBackendStatus("online");
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "The PDF upload failed.";
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `${Date.now()}-upload-error`,
+          role: "assistant",
+          content: `Upload failed. ${message}`,
+          timestamp: new Date(),
+        },
+      ]);
+      setBackendStatus("offline");
+    } finally {
+      setIsUploading(false);
+      event.target.value = "";
     }
   };
 
@@ -239,7 +301,7 @@ export default function ChatInterface({ isOpen, onClose }: ChatInterfaceProps) {
                 This interface sends your question to the real Group 27 FastAPI backend and displays the returned analysis, SQL, and result rows.
               </p>
               <p className="mb-8 max-w-md text-sm text-white/35">
-                If the backend is offline, start FastAPI on port 8000 before submitting a query.
+                If the backend is offline, start FastAPI on port 8000 before submitting a query or uploading a PDF to the knowledge base.
               </p>
 
               <div className="grid w-full max-w-2xl grid-cols-1 gap-3 sm:grid-cols-2">
@@ -356,7 +418,7 @@ export default function ChatInterface({ isOpen, onClose }: ChatInterfaceProps) {
                 );
               })}
 
-              {isLoading ? (
+              {isLoading || isUploading ? (
                 <div className="flex justify-start">
                   <div className="rounded-2xl border border-white/10 bg-[#1a1a1a] px-4 py-3">
                     <div className="flex items-center gap-3">
@@ -365,7 +427,9 @@ export default function ChatInterface({ isOpen, onClose }: ChatInterfaceProps) {
                         <span className="h-2 w-2 animate-bounce rounded-full bg-[#5EEAD4]" style={{ animationDelay: "150ms" }} />
                         <span className="h-2 w-2 animate-bounce rounded-full bg-[#5EEAD4]" style={{ animationDelay: "300ms" }} />
                       </div>
-                      <span className="min-w-[220px] text-sm text-white/50 transition-opacity duration-300">{thinkingMessage}</span>
+                      <span className="min-w-[220px] text-sm text-white/50 transition-opacity duration-300">
+                        {isUploading ? "Uploading PDF and rebuilding the knowledge base..." : thinkingMessage}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -379,6 +443,28 @@ export default function ChatInterface({ isOpen, onClose }: ChatInterfaceProps) {
         <div className="border-t border-white/10 bg-[#0d0d0d] p-4">
           <div className="mx-auto max-w-4xl">
             <div className="flex items-end gap-3 rounded-2xl border border-white/10 bg-[#1a1a1a] p-3 transition-colors focus-within:border-[#5EEAD4]/50">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,application/pdf"
+                className="hidden"
+                onChange={handleFileSelected}
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isLoading || isUploading}
+                className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-white/10 transition-all duration-200 ${
+                  isLoading || isUploading
+                    ? "cursor-not-allowed bg-white/5 text-white/30"
+                    : "bg-white/5 text-white/70 hover:border-[#5EEAD4]/40 hover:bg-white/10 hover:text-white"
+                }`}
+                aria-label="Upload PDF to knowledge base"
+                title="Upload PDF to knowledge base"
+              >
+                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 16.5V3.75m0 0L7.5 8.25m4.5-4.5l4.5 4.5M3.75 15v2.25A2.25 2.25 0 006 19.5h12a2.25 2.25 0 002.25-2.25V15" />
+                </svg>
+              </button>
               <textarea
                 ref={inputRef}
                 value={input}
@@ -391,9 +477,9 @@ export default function ChatInterface({ isOpen, onClose }: ChatInterfaceProps) {
               />
               <button
                 onClick={() => handleSend()}
-                disabled={!input.trim() || isLoading}
+                disabled={!input.trim() || isLoading || isUploading}
                 className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl transition-all duration-200 ${
-                  input.trim() && !isLoading
+                  input.trim() && !isLoading && !isUploading
                     ? "bg-gradient-to-r from-[#5EEAD4] to-[#14b8a6] text-black"
                     : "cursor-not-allowed bg-white/10 text-white/30"
                 }`}
@@ -405,7 +491,7 @@ export default function ChatInterface({ isOpen, onClose }: ChatInterfaceProps) {
               </button>
             </div>
             <p className="mt-3 text-center text-xs text-white/30">
-              The frontend mirrors the backend contract directly. Start the FastAPI server on port 8000 before querying.
+              Upload a PDF to the knowledge base or send a query to the backend. Both actions require the FastAPI server on port 8000.
             </p>
           </div>
         </div>

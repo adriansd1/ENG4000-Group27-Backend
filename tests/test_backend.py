@@ -70,11 +70,11 @@ def test_query_endpoint_success(monkeypatch):
     monkeypatch.setattr(
         main_module,
         "orchestrate_query",
-        lambda question: (
-            "SELECT sitename FROM site_metadata",
-            [{"sitename": "Toronto-1"}],
-            "Toronto-1 is a valid site.",
-        ),
+        lambda question: {
+            "sql": "SELECT sitename FROM site_metadata",
+            "rows": [{"sitename": "Toronto-1"}],
+            "analysis": "Toronto-1 is a valid site.",
+        },
     )
 
     response = client.post("/api/query", json={"question": "List site names"})
@@ -133,6 +133,46 @@ def test_kb_ingest_endpoint_passes_through_no_files(monkeypatch):
     assert response.status_code == 200
     assert response.json()["status"] == "no_files"
     assert "No files" in response.json()["message"]
+
+
+def test_kb_upload_endpoint_success(monkeypatch):
+    monkeypatch.setattr(
+        main_module,
+        "save_uploaded_document",
+        lambda filename, content: f"C:/tmp/{filename}",
+    )
+    monkeypatch.setattr(
+        main_module,
+        "ingest_knowledge_base",
+        lambda: {"status": "ok", "files": 4, "chunks": 12},
+    )
+
+    response = client.post(
+        "/api/kb/upload",
+        files={"file": ("dataset.pdf", b"%PDF-1.4 fake", "application/pdf")},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert payload["filename"] == "dataset.pdf"
+    assert payload["ingest"]["chunks"] == 12
+
+
+def test_kb_upload_endpoint_rejects_invalid_type(monkeypatch):
+    monkeypatch.setattr(
+        main_module,
+        "save_uploaded_document",
+        lambda filename, content: (_ for _ in ()).throw(ValueError("Unsupported file type for upload: dataset.csv")),
+    )
+
+    response = client.post(
+        "/api/kb/upload",
+        files={"file": ("dataset.csv", b"siteid,value", "text/csv")},
+    )
+
+    assert response.status_code == 400
+    assert "Unsupported file type" in response.json()["detail"]
 
 
 def test_query_request_model_accepts_valid_input():
@@ -494,13 +534,15 @@ def test_generate_analysis_includes_kb_context(monkeypatch):
 
     monkeypatch.setattr(orch, "call_ollama", fake_call_ollama)
 
-    result = orch.generate_analysis(
+    analysis, diagnostics, kb_sources = orch.generate_analysis(
         "What happened?",
         "SELECT * FROM site_metadata",
         [{"sitename": "Toronto-1"}],
     )
 
-    assert result == "Analysis output"
+    assert analysis == "Analysis output"
+    assert diagnostics["row_count"] == 1
+    assert kb_sources == ["energy_notes.txt", "ops_guide.txt"]
     assert "energy_notes.txt" in captured["prompt"]
     assert "Toronto sites benefit from peak shaving." in captured["prompt"]
 
@@ -516,13 +558,15 @@ def test_generate_analysis_uses_fallback_when_no_kb_chunks(monkeypatch):
 
     monkeypatch.setattr(orch, "call_ollama", fake_call_ollama)
 
-    result = orch.generate_analysis(
+    analysis, diagnostics, kb_sources = orch.generate_analysis(
         "What happened?",
         "SELECT * FROM site_metadata",
         [],
     )
 
-    assert result == "No KB analysis"
+    assert analysis == "No KB analysis"
+    assert diagnostics["row_count"] == 0
+    assert kb_sources == []
     assert "No relevant knowledge-base documents retrieved." in captured["prompt"]
 
 
@@ -538,28 +582,32 @@ def test_generate_analysis_only_uses_first_20_rows(monkeypatch):
     monkeypatch.setattr(orch, "call_ollama", fake_call_ollama)
 
     rows = [{"row": i} for i in range(25)]
-    result = orch.generate_analysis("Q", "SELECT x", rows)
+    analysis, diagnostics, kb_sources = orch.generate_analysis("Q", "SELECT x", rows)
 
-    assert result == "Trimmed rows"
+    assert analysis == "Trimmed rows"
+    assert diagnostics["row_count"] == 25
+    assert kb_sources == []
     assert "{'row': 19}" in captured["prompt"]
     assert "{'row': 20}" not in captured["prompt"]
 
 def test_orchestrate_query_success_without_retry(monkeypatch):
     monkeypatch.setattr(orch, "generate_sql_for_question", lambda q: "SELECT * FROM site_metadata")
     monkeypatch.setattr(orch, "run_sql", lambda sql: [{"sitename": "Toronto-1"}])
-    monkeypatch.setattr(orch, "generate_analysis", lambda question, sql, rows: "Done")
+    monkeypatch.setattr(orch, "generate_analysis", lambda question, sql, rows: ("Done", {"row_count": 1}, ["kb.pdf"]))
 
-    sql, rows, analysis = orch.orchestrate_query("List sites")
+    result = orch.orchestrate_query("List sites")
 
-    assert sql == "SELECT * FROM site_metadata"
-    assert rows == [{"sitename": "Toronto-1"}]
-    assert analysis == "Done"
+    assert result["sql"] == "SELECT * FROM site_metadata"
+    assert result["rows"] == [{"sitename": "Toronto-1"}]
+    assert result["analysis"] == "Done"
+    assert result["diagnostics"]["row_count"] == 1
+    assert result["kb_sources"] == ["kb.pdf"]
 
 
 def test_orchestrate_query_retries_after_initial_failure(monkeypatch):
     calls = {"generate": [], "run": 0}
 
-    def fake_generate(question):
+    def fake_generate(question, previous_error=""):
         calls["generate"].append(question)
         if len(calls["generate"]) == 1:
             return "SELECT * FROM bad_table"
@@ -573,21 +621,21 @@ def test_orchestrate_query_retries_after_initial_failure(monkeypatch):
 
     monkeypatch.setattr(orch, "generate_sql_for_question", fake_generate)
     monkeypatch.setattr(orch, "run_sql", fake_run)
-    monkeypatch.setattr(orch, "generate_analysis", lambda question, sql, rows: "Recovered")
+    monkeypatch.setattr(orch, "generate_analysis", lambda question, sql, rows: ("Recovered", {"row_count": 1}, []))
 
-    sql, rows, analysis = orch.orchestrate_query("List sites")
+    result = orch.orchestrate_query("List sites")
 
     assert calls["generate"][0] == "List sites"
-    assert calls["generate"][1] == "List sites Please fix the SQL and retry."
-    assert sql == "SELECT * FROM site_metadata"
-    assert rows == [{"sitename": "Toronto-1"}]
-    assert analysis == "Recovered"
+    assert calls["generate"][1] == "List sites"
+    assert result["sql"] == "SELECT * FROM site_metadata"
+    assert result["rows"] == [{"sitename": "Toronto-1"}]
+    assert result["analysis"] == "Recovered"
 
 
 def test_orchestrate_query_raises_if_retry_also_fails(monkeypatch):
     calls = {"count": 0}
 
-    def fake_generate(question):
+    def fake_generate(question, previous_error=""):
         calls["count"] += 1
         return f"SELECT * FROM bad_table_{calls['count']}"
 
@@ -613,15 +661,15 @@ def test_orchestrate_query_passes_original_question_to_analysis(monkeypatch):
         captured["question"] = question
         captured["sql"] = sql
         captured["rows"] = rows
-        return "analysis"
+        return "analysis", {"row_count": 1}, []
 
     monkeypatch.setattr(orch, "generate_analysis", fake_analysis)
 
-    sql, rows, analysis = orch.orchestrate_query("Original question")
+    result = orch.orchestrate_query("Original question")
 
-    assert sql == "SELECT 1"
-    assert rows == [{"x": 1}]
-    assert analysis == "analysis"
+    assert result["sql"] == "SELECT 1"
+    assert result["rows"] == [{"x": 1}]
+    assert result["analysis"] == "analysis"
     assert captured["question"] == "Original question"
     assert captured["sql"] == "SELECT 1"
     assert captured["rows"] == [{"x": 1}]
@@ -752,29 +800,30 @@ def test_list_kb_files_returns_empty_when_dir_missing(monkeypatch, tmp_path):
     assert files == []
 
 
-def test_list_kb_files_returns_only_txt_and_md(monkeypatch, tmp_path):
+def test_list_kb_files_returns_supported_extensions(monkeypatch, tmp_path):
     kb_dir = tmp_path / "knowledge_base"
     kb_dir.mkdir()
 
     (kb_dir / "a.txt").write_text("hello")
     (kb_dir / "b.md").write_text("hello")
-    (kb_dir / "c.pdf").write_text("ignore")
+    (kb_dir / "c.pdf").write_bytes(b"%PDF-1.4 fake")
     (kb_dir / "d.json").write_text("ignore")
 
     monkeypatch.setattr(kb, "KB_DIR", str(kb_dir))
 
     files = kb.list_kb_files()
 
-    assert len(files) == 2
+    assert len(files) == 3
     assert any(path.endswith("a.txt") for path in files)
     assert any(path.endswith("b.md") for path in files)
+    assert any(path.endswith("c.pdf") for path in files)
 
 
-def test_read_text_file_reads_contents(tmp_path):
+def test_read_document_reads_text_contents(tmp_path):
     path = tmp_path / "doc.txt"
     path.write_text("Toronto is important.", encoding="utf-8")
 
-    text = kb.read_text_file(str(path))
+    text = kb.read_document(str(path))
 
     assert text == "Toronto is important."
 
@@ -886,7 +935,7 @@ def test_ingest_knowledge_base_returns_no_files(monkeypatch, tmp_path):
     result = kb.ingest_knowledge_base()
 
     assert result["status"] == "no_files"
-    assert "No .txt/.md files found" in result["message"]
+    assert "No supported documents found" in result["message"]
 
 
 def test_ingest_knowledge_base_returns_no_chunks(monkeypatch, tmp_path):
