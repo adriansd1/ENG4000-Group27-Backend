@@ -1,103 +1,162 @@
+# Offline Conversational AI for Energy Data Analytics (Energy Expert)
 
-# Offline Conversational AI for Energy Data Analytics 
+**ENG 4000 Capstone Project — Team 27**
+York University, Lassonde School of Engineering | Fall 2025 – Winter 2026
 
-This repository contains the backend for the **Offline Conversational AI for Energy Data Analytics**, an offline conversational AI system designed to help telecom engineering teams analyze energy performance data using natural language.  
-At this stage, the backend now includes the initial FastAPI structure **plus PostgreSQL connectivity and dynamic schema introspection**, enabling the system to read database tables automatically.
+## Overview
 
----
+Energy Expert is a fully offline, conversational AI system that enables telecom operations staff to query complex energy performance data using natural language. Built for PLC Group, it runs entirely on local hardware with no cloud dependencies, ensuring full data privacy and security.
 
-## Project Overview
+The system uses a Dual RAG (Retrieval Augmented Generation) architecture that combines two reasoning pathways: a quantitative SQL pipeline for structured database queries, and a qualitative FAISS vector database for semantic document retrieval. Both pathways are powered by locally hosted language models through Ollama.
 
-This Project aims to allow users to interact with telecom site energy data through natural language queries.  
-The final backend will eventually include:
+> **Note:** The frontend is integrated directly into this repository under `frontend/`. The separate frontend repo is not in use.
 
-- Local LLM interaction  
-- SQL generation from natural language  
-- PostgreSQL data integration  
-- Diagnostic reasoning  
-- Domain knowledge augmentation  
-- Feedback loop for improvements  
+## Features
 
-This stage expands the foundation by adding database support and schema discovery.
+- Full natural language to SQL query pipeline with automated diagnostic analysis
+- FAISS based semantic document retrieval from engineering documentation
+- Next.js chatbot frontend fully connected to the backend API
+- Multilayer SQL safety validation (zero breach record across all testing)
+- PDF upload and ingestion for the knowledge base
+- User feedback logging endpoint
+- Complete offline operation via Ollama (Llama 3.1 8B), no external API dependencies
 
----
+## Tech Stack
 
-## Features Available at This Stage
+| Layer | Technology |
+|-------|------------|
+| Backend | Python, FastAPI v0.115.5, Uvicorn |
+| Frontend | Next.js, TypeScript, Tailwind CSS |
+| Database | PostgreSQL |
+| Vector DB | FAISS (faiss-cpu) |
+| Embeddings | sentence-transformers (all-MiniLM-L6-v2) |
+| LLM | Llama 3.1 8B via Ollama (local, offline) |
+| PDF Parsing | pypdf |
 
-### FastAPI Initialization  
-A minimal FastAPI application is set up with routes such as:
+## Repository Structure
 
-- GET / — a welcome endpoint confirming the backend is running  
-- GET /health — a simple status endpoint returning {"status": "ok"}
-- GET /schema — returns the full PostgreSQL database structure using dynamic schema introspection
- 
+```
+ENG4000-Group27-Backend/
+├── app/
+│   ├── __init__.py
+│   ├── config.py              # Environment variables and settings
+│   ├── db.py                  # PostgreSQL connection, schema introspection, SQL execution
+│   ├── evaluation.py          # Query evaluation utilities
+│   ├── knowledge_base.py      # FAISS vector DB, PDF ingestion, semantic retrieval
+│   ├── llm.py                 # Ollama LLM interface (Llama 3.1 8B)
+│   ├── main.py                # FastAPI app, API endpoints
+│   └── orchestrator.py        # Dual RAG pipeline coordination
+├── db/
+│   ├── full_schema.sql        # Complete database schema
+│   ├── site_metadata.sql      # Site metadata table
+│   ├── site_inventory.sql     # Equipment inventory table
+│   ├── performance_daily_data.sql  # Daily energy performance data
+│   ├── daily_alarms.sql       # Alarm records table
+│   └── seed_mock_data.sql     # Mock dataset for development
+├── frontend/
+│   ├── src/                   # Next.js source code
+│   ├── package.json           # Node.js dependencies
+│   ├── tailwind.config.ts     # Tailwind CSS configuration
+│   ├── next.config.js         # Next.js configuration
+│   └── tsconfig.json          # TypeScript configuration
+├── knowledge_base/            # Engineering PDFs and policy documents
+├── tests/
+│   └── test_backend.py        # Backend test suite
+├── .env.example               # Environment variable template
+├── requirements.txt           # Python dependencies
+└── README.md
+```
 
-### PostgreSQL Connection  
-The backend now supports PostgreSQL through environment-based configuration.
+## API Endpoints
 
-### Dynamic Schema Introspection  
-A new endpoint allows the system to automatically read the structure of all tables in the connected PostgreSQL database.
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/` | Root status endpoint |
+| GET | `/health` | Health check (`{"status": "ok"}`) |
+| GET | `/schema` | Returns PostgreSQL database schema overview |
+| POST | `/api/query` | Accepts `{"question": "..."}`, returns SQL, data rows, and diagnostic analysis |
+| POST | `/api/kb/ingest` | Triggers FAISS vector index rebuild from knowledge base documents |
+| POST | `/api/kb/upload` | Upload PDF files to the knowledge base |
+| POST | `/api/feedback` | Logs user feedback on query responses |
 
----
+## Installation and Setup
 
-## Installation & Running Instructions
+### Prerequisites
+- Python 3.11+
+- Node.js 18+
+- PostgreSQL
+- Ollama with Llama 3.1 8B model pulled locally
 
-### 1. Clone the repository
+### Backend Setup
+
 ```bash
-git clone https://github.com/adriansd1/ENG4000-Group27-Backend/ ENG4000-Group27-Backend
+# Clone the repository
+git clone https://github.com/adriansd1/ENG4000-Group27-Backend.git
 cd ENG4000-Group27-Backend
-```
 
-### 2. Create a virtual environment
-```bash
-python -m venv .venv
-source .venv/bin/activate
-```
+# Create and activate virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-### 3. Install dependencies
-```bash
+# Install Python dependencies
 pip install -r requirements.txt
-```
 
-### 4. Set up the PostgreSQL database  
-Run the provided SQL schema files (located in /db):
+# Set up the database
+psql -U postgres -f db/full_schema.sql
+psql -U postgres -f db/seed_mock_data.sql
 
-```bash
-psql -U postgres -d energy_db -f db/full_schema.sql
-```
+# Configure environment variables
+cp .env.example .env
+# Edit .env with your PostgreSQL credentials and Ollama settings
 
-### 5. Configure environment variables  
-Copy `.env.example` to `.env` and update:
+# Start Ollama with Llama 3.1 8B
+ollama pull llama3.1:8b
+ollama serve
 
-```
-POSTGRES_URL=postgresql://postgres:<password>@localhost:5432/PLC_db
-```
-
-### 6. Start the backend server
-```bash
+# Start the backend
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
----
+### Frontend Setup
 
-## Test the Endpoints
+```bash
+cd frontend
 
-- http://localhost:8000  
-- http://localhost:8000/health  
-- http://localhost:8000/schema  
+# Install dependencies
+npm install
 
-If these return valid responses, your backend is connected and functioning properly.
+# Start the development server
+npm run dev
+```
 
----
+The frontend will be available at `http://localhost:3000` and connects to the backend at `http://localhost:8000`.
 
-## What Comes Next
+## Testing
 
-Future stages will introduce:
+```bash
+# Run backend tests
+pytest tests/test_backend.py -v
 
-- Local LLM (Ollama) integration  
-- Text-to-SQL capabilities  
-- Knowledge base retrieval  
-- Feedback system  
-- Swagger API documentation  
+# Verify endpoints manually
+curl http://localhost:8000/health
+curl http://localhost:8000/schema
+curl -X POST http://localhost:8000/api/query -H "Content-Type: application/json" -d '{"question": "What is the average diesel consumption across all sites?"}'
+```
 
-This README reflects the project with PostgreSQL integration and schema introspection included.
+## Team
+
+| Member | Role |
+|--------|------|
+| Dilpreet Bansi | Backend Development |
+| Adrian Sam Daliri | Backend / Integration Lead |
+| Nathan Binu Edappilly | Backend / Knowledge Base / LLM Integration |
+| Humayun Ejaz | Backend / Database |
+| Mark Farid | Backend / Testing |
+| Umer Shaikh | Frontend / UI Development |
+
+**Supervisor:** Professor Emily Kuang
+**Industry Partner:** PLC Group
+
+## License
+
+This project was developed as part of the ENG 4000 Capstone course at York University's Lassonde School of Engineering.
