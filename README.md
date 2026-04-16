@@ -22,6 +22,10 @@ This stage expands the foundation by adding database support and schema discover
 
 ---
 
+---
+## Frontend Demo Link: [Live Demo](https://plcai.netlify.app/)
+---
+
 ## Features Available at This Stage
 
 ### FastAPI Initialization  
